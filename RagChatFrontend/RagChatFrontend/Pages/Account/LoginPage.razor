@@ -1,0 +1,80 @@
+﻿@page "/login"
+@using Microsoft.AspNetCore.Components.Authorization
+@using RagChatFrontend.Authentication
+@using RagChatLogic.DTOs
+
+@inject AuthenticationStateProvider authStateProvider
+@inject NavigationManager NavManager
+@inject HttpClient httpClient
+
+<EditForm Model="@loginInfo" OnValidSubmit="HandleLogin">
+    <div>
+        <br /> <br /> <br /> <br /> <br />
+    </div>
+    <div class="formHeader">
+        <hr3 style="font-weigth:bold; color:purple">Rag Chatbot Login</hr3>
+    </div>
+    <div>
+        <br />
+    </div>
+
+    <div class="col-12 row">
+        <input type="email" class="form-control col-12" @bind="loginInfo.Email" placeholder="Email address" required />
+    </div>
+    <br />
+    <div class="col-12 row">
+        <input type="password" class="form-control col-12" @bind="loginInfo.Password" placeholder="Password" required />
+    </div>
+    <br />
+    <div class="col-12 row">
+        <span class="col-12"></span>
+        <input type="submit" class="form-control col-6 btn btn-primary" value="Login" />
+    </div>
+    <br />
+    <div class="col-12 row">
+        <p>Already have an account? <a href="/register">Register here</a></p>
+    </div>
+</EditForm>
+
+@code {
+    private Login loginInfo = new Login();
+    private string Message;
+    private string redirectUrl;
+
+    protected override void OnInitialized()
+    {
+        // Get the value of redirectlink from the URL
+        var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+        redirectUrl = uri.Query.Contains("redirectlink=") ? uri.Query.Replace("?redirectlink=", "") : null;
+    }
+
+    private async Task HandleLogin()
+    {
+        Message = string.Empty;
+        var response = await httpClient.PostAsJsonAsync("login", loginInfo);
+        if (!response.IsSuccessStatusCode)
+        {
+            Message = "Error occured!";
+            return;
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<LoginResponse>();
+        if (string.IsNullOrEmpty(result?.AccessToken))
+        {
+            Message = "Login failed";
+            return;
+        }
+
+        var authenticationModel = new AuthenticationModel()
+        {
+            AccessToken = result.AccessToken,
+            RefreshToken = result.RefreshToken,
+            Email = loginInfo!.Email
+        };
+
+        var customAuthStateProvider = (RagAuthenticationStateProvider)authStateProvider;
+        await customAuthStateProvider.UpdateAuthenticationStateAsync(authenticationModel);
+
+        NavManager.NavigateTo(!string.IsNullOrEmpty(redirectUrl) ? $"/{redirectUrl}" : "/");
+    }
+}

@@ -1,0 +1,56 @@
+trigger:
+- main  # Adjust the branch name as needed
+
+pool:
+  vmImage: 'windows-latest'
+
+steps:
+- task: DotNetCoreCLI@2
+  displayName: 'Restore NuGet packages'
+  inputs:
+    command: 'restore'
+    projects: '**/*.csproj'
+
+- task: DotNetCoreCLI@2
+  displayName: 'Build solution'
+  inputs:
+    command: 'build'
+    projects: '**/*.csproj'
+
+- task: DotNetCoreCLI@2
+  displayName: 'Publish Web API project'
+  inputs:
+    command: 'publish'
+    publishWebProjects: true
+    arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)/WebAPI'
+
+- task: DotNetCoreCLI@2
+  displayName: 'Publish Blazor WebAssembly project'
+  inputs:
+    command: 'publish'
+    publishWebProjects: true
+    arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)/BlazorWebAssembly'
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish Artifact: drop'
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'drop'
+
+- task: AzureRmWebAppDeployment@4
+  displayName: 'Deploy Web API to Azure App Service'
+  inputs:
+    ConnectionType: 'AzureRM'
+    azureSubscription: '9ffbb706-2794-44fd-bf0f-09c505291ec8'
+    appType: 'webApp'
+    WebAppName: 'myragchatapi'
+    packageForLinux: '$(Build.ArtifactStagingDirectory)/WebAPI'
+
+- task: AzureRmWebAppDeployment@4
+  displayName: 'Deploy Blazor WebAssembly to Azure App Service'
+  inputs:
+    ConnectionType: 'AzureRM'
+    azureSubscription: '9ffbb706-2794-44fd-bf0f-09c505291ec8'
+    appType: 'webApp'
+    WebAppName: 'myragchat'
+    packageForLinux: '$(Build.ArtifactStagingDirectory)/BlazorWebAssembly'

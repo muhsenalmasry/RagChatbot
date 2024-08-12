@@ -1,0 +1,290 @@
+﻿@using Blazored.LocalStorage
+@using Microsoft.AspNetCore.Components.Authorization
+@using Newtonsoft.Json
+@using RagChatFrontend.Authentication
+@using System.Net.Http.Headers
+@using System.Text.Json
+@using RagChatLogic.DTOs
+@using System.Text
+@using System.Text.RegularExpressions
+@using RagChatLogic.Enums
+
+@inject IJSRuntime JSRuntime
+@inject IAuthorizedHttpClient httpClient
+@inject ILocalStorageService localStorageService
+@implements IAsyncDisposable
+
+@if (ShowForm)
+{
+    <div class="modal-overlay">
+        @if (IsLoading)
+        {
+            <div class="loading-card">
+                <div class="loading-indicator">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        }
+        <div class="card @(isFlipped ? "flip" : "")">
+            @if (selectedSource == DatasourceType.BlobContainer)
+            {
+                <div class="card-blobchatbot">
+                    <h2 class="add-file-header">Add File to Your Data</h2>
+                    <button class="close-button" @onclick="@SetShowForm" disabled="@(IsLoading)">X</button>
+                    <div class="form-container">
+                        <p class="uploading-state">@uploadingState</p>
+                        <div class="dropdown-container">
+                            <div class="dropdown-wrapper">
+                                <label for="chatbotDropdown">Choose chatbot:</label>
+                                <div class="customer-dropdown">
+                                    <select class="dropdown" id="chatbotDropdown" @bind="SelectedIndex" disabled="@(IsLoading)">
+                                        <option value="0">Create New</option>
+                                        @foreach (var index in UserIndexes)
+                                        {
+                                            <option value="@index.Id">@index.DisplayName</option>
+                                        }
+                                    </select>
+                                    <div class="dropdown-arrow"></div>
+                                </div>
+                            </div>
+                            @if (SelectedIndex == 0)
+                            {
+                                <div class="new-chatbot-name-container">
+                                    <label for="new-chatbot-name">Chatbot name:</label>
+                                    <input type="text" id="newChatbot" class="new-chatbot-name" @bind="NewChatbotName" disabled="@(IsLoading)" />
+                                </div>
+                            }
+                        </div>
+                        @if (SelectedIndex == 0)
+                        {
+                            <div class="new-chatbot-availability-container">
+                                <input type="checkbox" id="newChatbotAvailiability" class="switch" @bind="IsAvailableForPublic" disabled="@(IsLoading)" />
+                                <label for="newChatbotAvailiability">Available for public</label>
+                            </div>
+                        }
+                        <div @ref="dropZoneElement" class="drop-zone" disabled="@(IsLoading)">
+                            <p>Drop or paste a file here, or select the file using the input</p>
+                            <InputFile OnChange="@OnChange" @ref="inputFile" class="input-file" id="fileInput" style="display: none;" Multiple="true" disabled="@(IsLoading)" />
+                            <label for="fileInput" class="custom-file-button">Choose File</label>
+                        </div>
+                        <button class="submit-button" @onclick="SubmitFiles" disabled="@(IsLoading)">Submit</button>
+                        @if (addedFiles.Any())
+                        {
+                            <div>
+                                <ul>
+                                    @foreach (var fileName in addedFiles)
+                                    {
+                                        <li style="list-style-type: none;">
+                                            <button class="fa-regular fa-rectangle-xmark remove-button" @onclick="() => RemoveFile(fileName)" disabled="@(IsLoading)"></button>
+                                            @fileName
+                                        </li>
+                                    }
+                                </ul>
+                        </div>
+                    }
+                </div>
+                <p class="datasource-types">
+                    <span class="@(selectedSource == DatasourceType.BlobContainer ? "selected" : "")" @onclick="() => SelectSource(DatasourceType.BlobContainer)">Files</span>
+                    <span class="@(selectedSource == DatasourceType.SqlDatabase ? "selected" : "")" @onclick="() => SelectSource(DatasourceType.SqlDatabase)">Sql DB</span>
+                </p>
+            </div>
+            }
+            else if (selectedSource == DatasourceType.SqlDatabase)
+            {
+            <div class="card-sql">
+                <h2 class="add-sql-chatbot">Add Chatbot to Your SQL Database</h2>
+                <button class="close-button" @onclick="@SetShowForm" disabled="@(IsLoading)">X</button>
+                <div class="form-container">
+                    <div class="new-chatbot-name-container">
+                        <label for="newChatbot">Chatbot name:</label>
+                        <input type="text" id="newChatbot" class="new-chatbot-name" @bind="NewChatbotName" disabled="@(IsLoading)" />
+                    </div>
+                    <div class="connection-string-container">
+                        <label for="connectionString">Connection string:</label>
+                        <input type="password" id="connectionString" class="connection-string" @bind="NewChatbotName" disabled="@(IsLoading)" />
+                    </div>
+                    <button class="submit-button" @onclick="SubmitFiles" disabled="@(IsLoading)">Submit</button>
+
+                </div>
+                <p class="datasource-types">
+                    <span class="@(selectedSource == DatasourceType.BlobContainer ? "selected" : "")" @onclick="() => SelectSource(DatasourceType.BlobContainer)">Files</span>
+                    <span class="@(selectedSource == DatasourceType.SqlDatabase ? "selected" : "")" @onclick="() => SelectSource(DatasourceType.SqlDatabase)">Sql DB</span>
+                </p>
+            </div>
+            }
+        </div>
+    </div>
+}
+
+
+@code {
+    string uploadingState = string.Empty;
+
+    [Parameter]
+    public bool ShowForm { get; set; }
+    [Parameter]
+    public Action SetShowForm { get; set; }
+    [Parameter]
+    public int SelectedIndex { get; set; }
+    [Parameter]
+    public bool ShowAddFilesForm { get; set; }
+    [Parameter]
+    public List<UserIndex> UserIndexes { get; set; }
+    [Parameter]
+    public Action<UserIndex> AddUserIndex { get; set; }
+
+    private ElementReference dropZoneElement;
+    private InputFile inputFile;
+
+    private IJSObjectReference _module;
+    private IJSObjectReference _dropZoneInstance;
+
+    private List<string> addedFiles = new List<string>();
+    private Dictionary<string, byte[]> fileContents = new Dictionary<string, byte[]>();
+    private string NewChatbotName;
+    private bool IsAvailableForPublic = false;
+    private bool IsLoading = false;
+    private bool isFlipped = false;
+    private DatasourceType selectedSource = DatasourceType.BlobContainer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        await Task.Delay(100); // Delay to ensure inputFile is initialized
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            while (inputFile == null)
+            {
+                await Task.Delay(1000); // Delay to give time for inputFile to initialize
+            }
+            _module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "/dropZone.js");
+            _dropZoneInstance = await _module.InvokeAsync<IJSObjectReference>("initializeFileDropZone", dropZoneElement, inputFile?.Element);
+        }
+    }
+
+    async Task OnChange(InputFileChangeEventArgs e)
+    {
+        foreach (var file in e.GetMultipleFiles())
+        {
+            using (var stream = file.OpenReadStream())
+            using (var memoryStream = new MemoryStream())
+            {
+                await stream.CopyToAsync(memoryStream);
+                fileContents.Add(file.Name, memoryStream.ToArray());
+                addedFiles.Add(file.Name);
+            }
+        }
+    }
+
+    void RemoveFile(string fileName)
+    {
+        addedFiles.Remove(fileName);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_dropZoneInstance != null)
+        {
+            await _dropZoneInstance.InvokeVoidAsync("dispose");
+            await _dropZoneInstance.DisposeAsync();
+        }
+
+        if (_module != null)
+        {
+            await _module.DisposeAsync();
+        }
+    }
+
+    private async Task SubmitFiles()
+    {
+        IsLoading = true;
+        StateHasChanged();
+        try
+        {
+            var files = new MultipartFormDataContent();
+            foreach (var file in fileContents)
+            {
+                files.Add(new ByteArrayContent(file.Value), "files", file.Key);
+            }
+
+            HttpResponseMessage response;
+            UserIndex newUserIndex;
+            if (SelectedIndex != 0)
+            {
+                var index = UserIndexes.First(i => i.Id == SelectedIndex);
+                newUserIndex = index;  
+                var requestModel = new
+                {
+                    indexId = index.Id,
+                };
+
+                response = await httpClient.SendAsync("addfiles", "indexfiles-existing", HttpMethod.Post, fileContents, requestModel);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return;
+                }
+            }
+            else
+            {
+                var indexName = (Regex.Replace(NewChatbotName, @"[^a-zA-Z0-9]", "")).ToLower();
+                var requestModel = new
+                {
+                    displayName = NewChatbotName,
+                    indexName = "index" + indexName,
+                    containerName = "container" + indexName,
+                    isAvailableForPublic = IsAvailableForPublic,
+                    datasourceType = selectedSource,
+                };
+
+                newUserIndex = new UserIndex
+                {
+                    DisplayName = NewChatbotName,
+                    IndexName = requestModel.indexName,
+                    ContainerName = requestModel.containerName,
+                    IsAvailableForPublic = IsAvailableForPublic,
+                    DatasourceType = selectedSource,
+                };
+
+                response = await httpClient.SendAsync("addfiles", "indexfiles", HttpMethod.Post, fileContents, requestModel);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return;
+                }
+
+                newUserIndex.Id = await response.Content.ReadFromJsonAsync<int>();
+                AddUserIndex(newUserIndex);
+            }
+
+            NewChatbotName = string.Empty;
+            fileContents.Clear();
+            addedFiles.Clear();
+            uploadingState = "Files uploaded successfully.";
+            Task.Delay(100);
+            SetShowForm();
+        }
+        catch(Exception ex)
+        {
+            throw new Exception("ex: ", ex);
+        }
+        finally
+        {
+            IsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void FlipCard()
+    {
+        isFlipped = !isFlipped;
+    }
+
+    private void SelectSource(DatasourceType source)
+    {
+        selectedSource = source;
+        isFlipped = source == DatasourceType.SqlDatabase;
+    }
+}

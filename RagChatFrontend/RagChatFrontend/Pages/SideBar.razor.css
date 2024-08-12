@@ -1,0 +1,211 @@
+﻿.chatbots-menu-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.sidebar-header-icon {
+    font-size: 1.5rem;
+}
+
+.sidebar-header {
+    visibility: hidden;
+    font-size: 1.25rem;
+    font-weight: bold;
+    white-space: nowrap;
+    margin: 0;
+    transform-origin: left center;
+    transition: opacity 0.5 ease, transform 0.5 ease;
+}
+
+.expand .sidebar-header {
+    visibility: visible;
+ }
+
+nav {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    justify-content: space-between;
+    height: 100%;
+}
+
+ul {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 0;
+}
+
+li {
+    list-style-type: none;
+}
+
+.chatbot-item {
+
+}
+
+.chatbot-name {
+    visibility: hidden;
+    position: absolute;
+    margin-left: 0.6rem;
+    opacity: 0.7;
+}
+
+.expand .chatbot-name {
+    visibility: visible;
+ }
+
+.chatbot-item.selected .chatbot-name {
+    opacity: 0.9;
+    transform-origin: left center;
+    transform: scale(1.1);
+    transition: opacity 0.5 ease, transform 0.5s ease;
+}
+
+.chatbot-item:hover  .chatbot-name {
+    white-space: nowrap;
+    opacity: 1;
+    transform-origin: left center;
+    transform: scale(1.1);
+    transition: opacity 0.5 ease, transform 0.3s ease;
+}
+
+.chatbot-item:hover  .chatbot-icon {
+    transform: scale(1.1);
+    transition: opacity 0.5 ease, transform 0.5s ease;
+}
+
+.ellipsis-container {
+    display: none;
+    position: absolute;
+    right: 12px;
+    cursor: pointer;
+}
+
+.chatbot-item:hover .ellipsis-container,
+.chatbot-item.selected .ellipsis-container {
+    display: inline-block;
+}
+
+.fa-ellipsis-vertical {
+    cursor: pointer;
+}
+
+.delete-option {
+    position: absolute;
+    padding: 5px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    top: 75%;
+    right: 5px;
+    border-radius: 5px;
+    display: none;
+}
+
+.chatbot-item:hover .delete-option {
+    display: block;
+}
+
+.chatbot-item.selected:hover .delete-option {
+    display: block;
+}
+
+.delete-option button {
+    background: #A6D9ED;
+    border: none;
+    color: red;
+    cursor: pointer;
+}
+
+.add-chatbot {
+    font-size: 1rem;
+}
+
+.add-chatbot:hover  .add-chatbot-text {
+    transform: scale(1.1);
+    opacity: 1;
+}
+
+.add-chatbot:hover  .add-chatbot-icon {
+    transform: scale(1.1);
+    transition: opacity 0.5 ease, transform 0.5s ease;
+}
+
+.add-chatbot-text {
+    visibility: hidden;
+    position: absolute;
+    white-space: nowrap;
+    margin-left: 0.6rem;
+    opacity: 0.7;
+    transform-origin: left center;
+    transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.expand .add-chatbot-text {
+    visibility: visible;
+ }
+
+@media (min-width: 1600px) {
+    .add-chatbot {
+        bottom: 16%;
+    }
+}
+
+@media (min-width: 367) and (max-width: 767px) {
+    .chatbot-item {
+        left: 0;
+    }
+
+    .sidebar-header {
+        font-size: 70%;
+        white-space: nowrap;
+        padding: 0px;
+    }
+
+    .expanded .sidebar-header {
+        left: 1px;
+    }
+
+    .chatbot-icon {
+        font-size: 70%;
+    }
+
+    .chatbot-name {
+        font-size: 70%;
+    }
+
+    .expand .chatbot-name {
+        left: 1px;
+    }
+
+    .expanded .sidebar-header {
+        left: 1px;
+    }
+
+    .add-chatbot-icon {
+        font-size: 70%;
+    }
+}
+
+@media (max-width: 366px) {
+    .sidebar-header-icon {
+        color: #00008B;
+        font-size: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .sidebar-header {
+        font-size: 70%;
+        top: 5.3%;
+        left: 20%;
+        white-space: nowrap;
+        padding: 0px;
+    }
+
+    .add-chatbot {
+        font-size: 70%;
+        bottom: 14%;
+    }
+}

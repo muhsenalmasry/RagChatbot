@@ -1,0 +1,243 @@
+﻿@page "/"
+@inherits LayoutComponentBase
+
+@using Azure.AI.OpenAI
+@using Microsoft.AspNetCore.Components.Authorization
+@using Newtonsoft.Json
+@using Newtonsoft.Json.Linq
+@using RagChatFrontend.Authentication
+@using RagChatLogic.DTOs
+@using RagChatLogic.Enums
+@using System.Text
+@using System.Net
+
+@inject NavigationManager NavManager
+@inject IAuthorizedHttpClient httpClient
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Chat with your data</PageTitle>
+
+<h1>Chat with your data</h1>
+
+<div class="wrapper">
+    <div class="sidebar-container @(isExpanded ? "expand" : "collapse")"
+         @onmouseenter="ExpandSidebar"
+         @onmouseleave="CollapseSidebar">
+        <SideBar
+            ShowAddFilesForm="@ShowAddFilesForm"
+            SelectedIndex="@SelectedIndex"
+            UserIndexes="@UserIndexes"
+            UpdateSelectedIndex="@UpdateSelectedIndex"
+            UpdateUserIndexes="@UpdateUserIndexes"
+            SetShowAddFilesForm="@SetShowAddFilesValue" />
+    </div>
+    <div class="main-area">
+        <div class="chat-container">
+            @if (!UserIndexes.Any())
+            {
+                <div class="no-messages">No chatbots were created yet. Start by creating a new chatbot!</div>
+            }
+            else
+            {
+                @if (!Messages.Any())
+                {
+                    <div class="no-messages">No messages to show. Start a conversation!</div>
+                }
+                else
+                {
+                    @foreach (var message in Messages)
+                    {
+                        <div class="@(message.Sender == nameof(MessageSender.User) ? "user-message" : "system-message")">
+                            <div class="message">
+                                <span id="@($"message-{message.Id}")">@message.Text</span>
+                            </div>
+                        </div>
+                    }
+                }
+            }
+        </div>
+        @if(IsTyping)
+        {
+            <div class="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        }
+        <div class="user-input @(isExpanded ? "expand" : "collapse")">
+            <input type="text" @bind="@UserInput" placeholder="Write a message here.." @onkeyup="OnInputKeyUp" />
+            <button id="send-message" @onclick="SendMessage">
+                <i class="fa-regular fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+    <div class="add-files-form">
+        <AddingFiles
+            ShowForm="@ShowAddFilesForm"
+            SelectedIndex="@SelectedIndex"
+            UserIndexes="@UserIndexes"
+            SetShowForm="@SetShowAddFilesValue"
+            AddUserIndex="@AddUserIndex"/>
+    </div>
+</div>
+
+
+
+
+@code {
+    [CascadingParameter] protected Task<AuthenticationState> AuthStat { get; set; }
+
+    private bool ShowAddFilesForm = false;
+    private string NoMessages;
+    private string NoChatbots;
+    private int SelectedIndex = 0;
+    private bool isExpanded = false;
+    private List<UserIndex> UserIndexes = new List<UserIndex>();
+    private List<Message> Messages = new List<Message>();
+    private string UserInput;
+    private bool IsTyping = false;
+
+    protected async override Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+        var user = (await AuthStat).User;
+        if (!user.Identity.IsAuthenticated)
+        {
+            NavManager.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(NavManager.Uri)}");
+        }
+        else
+        {
+            var response = await httpClient.SendAsync("", "userindexes", HttpMethod.Get);
+            if (response.IsSuccessStatusCode)
+            {
+                UserIndexes = await response.Content.ReadFromJsonAsync<List<UserIndex>>();
+                SelectedIndex = UserIndexes.FirstOrDefault()?.Id ?? 0;
+            }
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized || !UserIndexes.Any())
+            {
+                return;
+            }
+
+            response = await httpClient.SendAsync("", $"chat-messages?selectedIndexId={SelectedIndex}", HttpMethod.Get);
+            if (response.IsSuccessStatusCode)
+            {
+                Messages = await response.Content.ReadFromJsonAsync<List<Message>>();
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await this.ChatContainerScrollToBottom();
+
+    }
+
+    private async Task ChatContainerScrollToBottom()
+    {
+        var _module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "/chat.js");
+        await _module.InvokeVoidAsync("scrollToMessagesBottom");
+    }
+
+    private void SetShowAddFilesValue()
+    {
+        ShowAddFilesForm = !ShowAddFilesForm;
+        StateHasChanged();
+    }
+
+    protected async Task SendMessage()
+    {
+        IsTyping = true;
+        var requestModel = new
+        {
+            indexId = SelectedIndex,
+            userInput = UserInput,
+            messages = Messages
+        };
+
+        var message = new Message
+        {
+            Sender = nameof(MessageSender.User),
+            Text = UserInput
+        };
+
+        Messages.Add(message);
+        UserInput = string.Empty;
+
+        var jsonContent = new StringContent(JsonConvert.SerializeObject(requestModel), Encoding.UTF8, "application/json");
+        var response = await httpClient.SendAsync("", "chatcompletion", HttpMethod.Post, jsonContent);
+
+        IsTyping = false;
+
+        if (response.IsSuccessStatusCode)
+        {
+            var jsonString = await response.Content.ReadAsStringAsync();
+            var jsonObject = JObject.Parse(jsonString);
+            var id = jsonObject["id"].Value<int>();
+            var text = jsonObject["text"].Value<string>();
+            message = new Message
+            {
+                Id = id,
+                Sender = nameof(MessageSender.System),
+                Text = string.Empty,
+            };
+            Messages.Add(message);
+
+            await this.TypeSystemMessage(message.Id, text);
+            await this.ChatContainerScrollToBottom();
+        }
+    }
+
+    private async Task TypeSystemMessage(int messageId, string content)
+    {
+        var _module = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "/chat.js");
+        await _module.InvokeVoidAsync("typeText", $"message-{messageId}", content);
+    }
+
+    private async Task UpdateSelectedIndex(int newSelectedIndexId)
+    {
+        SelectedIndex = newSelectedIndexId;
+        Messages = new List<Message>();
+        var response = await httpClient.SendAsync("", $"chat-messages?selectedIndexId={SelectedIndex}", HttpMethod.Get);
+        if (response.IsSuccessStatusCode)
+        {
+            Messages = await response.Content.ReadFromJsonAsync<List<Message>>();
+        }
+
+        StateHasChanged();
+    }
+
+    private void AddUserIndex(UserIndex userIndex)
+    {
+        UserIndexes.Add(userIndex);
+        if (SelectedIndex == 0)
+        {
+            SelectedIndex = userIndex.Id;
+        };
+
+        StateHasChanged();
+    }
+
+    private void UpdateUserIndexes(List<UserIndex> newUserIndexes)
+    {
+        UserIndexes = newUserIndexes;
+    }
+
+    private void ExpandSidebar()
+    {
+        isExpanded = true;
+    }
+
+    private void CollapseSidebar()
+    {
+        isExpanded = false;
+    }
+
+    private async Task OnInputKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SendMessage();
+        }
+    }
+}

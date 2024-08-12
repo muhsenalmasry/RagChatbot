@@ -1,0 +1,6 @@
+@RagChat_HostAddress = http://localhost:5249
+
+GET {{RagChat_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,0 +1,102 @@
+﻿@using RagChatFrontend.Authentication
+@using RagChatLogic.DTOs
+
+@inject IAuthorizedHttpClient httpClient
+
+<div class="chatbots-menu-header">
+    <span class="fa-solid fa-bars sidebar-header-icon" aria-hidden="true">
+    </span>
+    <h2 class="sidebar-header">Your Chatbots</h2>
+</div>
+<nav class="bi-house-door-fill-nav-menu @(collapseNavMenu ? "collapsed" : "expanded")">
+    <ul>
+        @foreach(var userIndex in UserIndexes){
+            <li class="chatbot-item @(SelectedIndex == userIndex.Id ? "selected" : "")" @onclick="() => HandleIndexSelection(userIndex.Id)">
+                <NavLink>
+                    <span class="fa-solid fa-headset chatbot-icon" aria-hidden="true">
+                        <span class="chatbot-name">
+                            @userIndex.DisplayName
+                        </span>
+                    </span>
+                </NavLink>
+                <span class="ellipsis-container" @onclick:stopPropagation>
+                    <span class="fa-solid fa-ellipsis-vertical" @onclick="() => ShowDeleteOption(userIndex.Id)">
+                        @if (DeleteIndex == userIndex.Id)
+                        {
+                            <div class="delete-option">
+                                <button @onclick:stopPropagation @onclick="() => DeleteChatbot(userIndex.Id)">Delete</button>
+                            </div>
+                        }
+                    </span>
+                </span>
+            </li>
+        }
+    </ul>
+    <div class="add-chatbot" @onclick="@SetShowAddFilesForm">
+        <span class="fa-solid fa-plus-circle add-chatbot-icon" aria-hidden="true">
+            <span class="add-chatbot-text">Add Chatbot</span>
+        </span
+    </div>
+</nav>
+
+
+@code {
+    [Parameter]
+    public List<UserIndex> UserIndexes { get; set; }
+    [Parameter]
+    public int SelectedIndex { get; set; }
+    [Parameter]
+    public bool ShowAddFilesForm { get; set; }
+    [Parameter]
+    public Func<int, Task> UpdateSelectedIndex { get; set; }
+    [Parameter]
+    public Action<List<UserIndex>> UpdateUserIndexes { get; set; }
+    [Parameter]
+    public Action SetShowAddFilesForm { get; set; }
+
+    private bool collapseNavMenu = true;
+    private bool isHovered = false;
+    private bool isExpanded = false;
+    private int? DeleteIndex { get; set; } = null;
+
+    private void ShowDeleteOption(int id)
+    {
+        DeleteIndex = DeleteIndex == id ? null : id;
+    }
+
+    private async Task DeleteChatbot(int id)
+    {
+        var response = await httpClient.SendAsync("", $"deletechatbot?id={SelectedIndex}", HttpMethod.Delete);
+        if (!response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        // Update the user indexes
+        UserIndexes = UserIndexes.Where(x => x.Id != id).ToList();
+        UpdateUserIndexes(UserIndexes);
+        await UpdateSelectedIndex(UserIndexes.FirstOrDefault()?.Id ?? 0);
+    }
+
+    // Method to update the selected index
+    private async Task HandleIndexSelection(int index)
+    {
+        SelectedIndex = index;
+
+        if (UpdateSelectedIndex != null)
+        {
+            await UpdateSelectedIndex(index);   
+        }
+    }
+
+    private void ExpandSidebar()
+    {
+        isExpanded = true;
+    }
+
+    private void CollapseSidebar()
+    {
+        isExpanded = false;
+    }
+}
+<script src="https://kit.fontawesome.com/066b71b5c1.js" crossorigin="anonymous"></script>

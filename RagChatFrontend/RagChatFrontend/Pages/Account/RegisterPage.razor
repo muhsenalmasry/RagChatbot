@@ -1,0 +1,72 @@
+﻿@page "/register"
+@using RagChatLogic.DTOs
+
+@inject NavigationManager NavManager
+@inject HttpClient httpClient
+
+<EditForm Model="@registerInfo"  OnValidSubmit="HandleRegister">
+    <div>
+        <br /> <br /> <br /> <br /> <br />
+    </div>
+    <div class="formHeader">
+        <hr3 style="font-weigth:bold; color:purple">Rag Chatbot Register</hr3>
+    </div>
+    <div>
+        <br />
+    </div>
+
+    <div class="col-12 row">
+        <input type="text" class="form-control col-12" @bind="registerInfo.FirstName" placeholder="First name" required />
+    </div>
+    <br />
+    <div class="col-12 row">
+        <input type="text" class="form-control col-12" @bind="registerInfo.LastName" placeholder="Last name" required />
+    </div>
+    <br />
+    <div class="col-12 row">
+        <input type="email" class="form-control col-12" @bind="registerInfo.Email" placeholder="Email address" required />
+    </div>
+    <br />
+    <div class="col-12 row">
+        <input type="password" class="form-control col-12" @bind="registerInfo.Password" placeholder="Password" required />
+    </div>
+    <br />
+    <div class="col-12 row">
+        <input type="password" class="form-control col-12" @bind="registerInfo.ConfirmPassword" placeholder="Confirm password" required />
+    </div>
+    <br />
+    <div class="col-12 row">
+        <span class="col-12"></span>
+        <input type="submit" class="form-control col-6 btn btn-primary" value="Register" />
+    </div>
+    <br />
+    <div class="col-12 row">
+        <p>Already have an account? <a href="/login">Login here</a></p>
+    </div>
+</EditForm>
+
+@code {
+    private User registerInfo { get; set; } = new User();
+    private string? Message;
+
+    private async Task HandleRegister()
+    {
+        Message = string.Empty;
+        var response = await httpClient.PostAsJsonAsync("register", registerInfo);
+        if (!response.IsSuccessStatusCode)
+        {
+            Message = "Error occured!";
+            return;
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<RegisterResponse>();
+        if (!result.IsSuccessful)
+        {
+            Message = result.Message;
+            return;
+        }
+
+        
+        NavManager.NavigateTo("/");
+    }
+}
